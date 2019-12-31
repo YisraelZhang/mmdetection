@@ -62,7 +62,7 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def simple_test(self, img, img_meta, **kwargs):
+    def simple_test(self, img, img_meta, anns=None, **kwargs):
         pass
 
     @abstractmethod
