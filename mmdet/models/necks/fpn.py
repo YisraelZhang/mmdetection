@@ -99,8 +99,18 @@ class FPN(nn.Module):
                 xavier_init(m, distribution='uniform')
 
     @auto_fp16()
-    def forward(self, inputs):
+    def forward(self, inputs, weight=None, scale=None):
         assert len(inputs) == len(self.in_channels)
+
+        #!TODO generate multi-scale seg weight
+        if weight is None:
+            weight = []
+        if len(weight):
+            weight_scale = [
+                weight[:, :, ::i, ::i]
+                for i in scale
+            ]
+            weight_scale = weight_scale[self.start_level:]
 
         # build laterals
         laterals = [
@@ -109,10 +119,16 @@ class FPN(nn.Module):
         ]
 
         # build top-down path
+        #!TODO add seg weight to laterals
         used_backbone_levels = len(laterals)
-        for i in range(used_backbone_levels - 1, 0, -1):
-            laterals[i - 1] += F.interpolate(
-                laterals[i], scale_factor=2, mode='nearest')
+        if weight is not None:
+            for i in range(used_backbone_levels - 1, 0, -1):
+                laterals[i - 1] += F.interpolate(
+                    laterals[i], scale_factor=2, mode='nearest') * weight_scale[i - 1]
+        else:
+            for i in range(used_backbone_levels - 1, 0, -1):
+                laterals[i - 1] += F.interpolate(
+                    laterals[i], scale_factor=2, mode='nearest')
 
         # build outputs
         # part 1: from original levels
