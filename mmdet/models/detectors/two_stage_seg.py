@@ -172,9 +172,7 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        print(type(gt_bboxes))
-        print(len(gt_bboxes))
-        print([i.shape for i in gt_bboxes])
+        mask = bbox2mask(gt_bboxes, img_meta)
         x = self.extract_feat(img)
 
         losses = dict()
@@ -382,6 +380,38 @@ def load_weights(img_meta, set_name='weight_linear_train', dir_root='./data/weig
     weight = torch.stack(weight_list)
     return weight
 
-def bbox2mask(gt_bboxes):
+def gaussian_mask(bbox, min_overlap):
+    ctr_x = (bbox[2] + bbox[0]) / 2
+    ctr_y = (bbox[3] + bbox[1]) / 2
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
+    bbox = bbox.int()
+    return bbox[0], bbox[2], bbox[1], bbox[3]
+
+
+def bbox2mask(gt_bboxes, img_meta):
     #!TODO implement bboxes converted to mask
-    pass
+    batch_size = len(gt_bboxes)
+    min_overlap = 0.5
+    pad_shape = []
+
+    # get the image shape of input (N, C, Hmax, Wmax)
+    for i in img_meta:
+        pad_shape.append(i['pad_shape'])
+    pad_shape = torch.tensor(pad_shape).max(dim=0)[0][:2].tolist()
+
+    mask_list = []
+    for i, bboxes in enumerate(gt_bboxes):
+        # img_shape = img_meta[i]['img_shape']
+        mask = torch.zeros(size=pad_shape)[None, None, :, :]
+        for bbox in bboxes:
+            ctr_x = (bbox[2] + bbox[0]) / 2
+            ctr_y = (bbox[3] + bbox[1]) / 2
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+            x1, x2, y1, y2 = gaussian_mask(bbox, min_overlap)
+            mask[:, :, y1:y2, x1:x2] = 1
+        mask_list.append(mask)
+
+    mask = torch.stack(mask_list)
+    return mask

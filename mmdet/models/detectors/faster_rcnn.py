@@ -1,9 +1,10 @@
 from ..registry import DETECTORS
 from .two_stage import TwoStageDetector
+from .two_stage_seg import TwoStageDetector_seg
 
 
 @DETECTORS.register_module
-class FasterRCNN(TwoStageDetector):
+class FasterRCNN(TwoStageDetector_seg):
 
     def __init__(self,
                  backbone,
