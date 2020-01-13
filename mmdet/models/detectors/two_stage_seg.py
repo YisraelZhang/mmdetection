@@ -172,6 +172,9 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        print(type(gt_bboxes))
+        print(len(gt_bboxes))
+        print([i.shape for i in gt_bboxes])
         x = self.extract_feat(img)
 
         losses = dict()
@@ -378,3 +381,7 @@ def load_weights(img_meta, set_name='weight_linear_train', dir_root='./data/weig
 
     weight = torch.stack(weight_list)
     return weight
+
+def bbox2mask(gt_bboxes):
+    #!TODO implement bboxes converted to mask
+    pass

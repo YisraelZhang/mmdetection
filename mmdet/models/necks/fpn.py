@@ -103,9 +103,7 @@ class FPN(nn.Module):
         assert len(inputs) == len(self.in_channels)
 
         #!TODO generate multi-scale seg weight
-        if weight is None:
-            weight = []
-        if len(weight):
+        if weight is not None:
             weight_scale = [
                 weight[:, :, ::i, ::i]
                 for i in scale
