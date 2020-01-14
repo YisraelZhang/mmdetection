@@ -4,12 +4,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import numpy as np
+from math import ceil
 
 from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
 from .. import builder
 from ..registry import DETECTORS
 from .base import BaseDetector
 from .test_mixins import BBoxTestMixin, MaskTestMixin, RPNTestMixin
+from ..mask_heads.fcn_seg import SEG
 
 
 @DETECTORS.register_module
@@ -60,6 +62,8 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
                 self.mask_roi_extractor = self.bbox_roi_extractor
             self.mask_head = builder.build_head(mask_head)
 
+        self.with_seg_head = True
+        self.seg_head=SEG()
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
 
@@ -268,6 +272,22 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
                                                 pos_labels)
                 losses.update(loss_mask)
 
+        # seg head and loss
+        if self.with_seg_head:
+            scales = [2**(i+2) for i in range(len(x))]
+            mask_onehot = mask2onehot(mask)
+            mask_scales = [mask_onehot[:, :, ::i, ::i] for i in scales]
+
+            seg_pred = [self.seg_head(i) for i in x]
+
+            loss_seg_list = list()
+            loss_seg = dict()
+
+            for i in range(len(seg_pred)):
+                loss_seg_list.append(self.seg_head.loss(seg_pred[i], mask_scales[i]))
+            loss_seg['loss_mask'] = sum(loss_seg_list)/len(loss_seg_list)
+            losses.update(loss_seg)
+
         return losses
 
     async def async_simple_test(self,
@@ -403,15 +423,31 @@ def bbox2mask(gt_bboxes, img_meta):
     mask_list = []
     for i, bboxes in enumerate(gt_bboxes):
         # img_shape = img_meta[i]['img_shape']
-        mask = torch.zeros(size=pad_shape)[None, None, :, :]
+        mask = torch.zeros(size=pad_shape)[None, :, :]
         for bbox in bboxes:
-            ctr_x = (bbox[2] + bbox[0]) / 2
-            ctr_y = (bbox[3] + bbox[1]) / 2
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-            x1, x2, y1, y2 = gaussian_mask(bbox, min_overlap)
-            mask[:, :, y1:y2, x1:x2] = 1
+            x1, x2, y1, y2 = random_shift(bbox, 0.1).astype(np.int)
+            mask[:, y1:y2, x1:x2] = 1
         mask_list.append(mask)
 
     mask = torch.stack(mask_list)
     return mask
+
+def mask2onehot(mask):
+    N, C, H, W = mask.shape
+    one_hot = torch.where(mask==0, torch.zeros(size=(N, C*2, H, W)), torch.ones(size=(N, C*2, H, W)))
+    return one_hot.view(N, -1, H, W).float().cuda()
+
+def random_shift(bbox, ratio=0.1):
+    ctr_x = (bbox[2] + bbox[0]) / 2
+    ctr_y = (bbox[3] + bbox[1]) / 2
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
+    ctr_x_shift = ctr_x + np.random.randn() * w * ratio
+    ctr_y_shift = ctr_y + np.random.randn() * h * ratio
+    w = w * (1 + truncated_normal() * ratio)
+    h = h * (1 + truncated_normal() * ratio)
+    return np.array([ctr_x_shift - w / 2.0, ctr_y_shift - h / 2.0,
+                     ctr_x_shift + w / 2.0, ctr_y_shift + h / 2.0])
+
+def truncated_normal(mean=0, std=1, minval=-1, maxval=1):
+    return np.clip(np.random.normal(mean, std), minval, maxval)
