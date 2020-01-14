@@ -104,7 +104,10 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
                 scale = [int(img.shape[-1] / i.shape[-1]) for i in x]
                 x = self.neck(x, weight, scale)
             else:
-                x = self.neck(x)
+                if self.seg_head:
+                    x = self.neck(x, self.seg_head)
+                else:
+                    x = self.neck(x)
         return x
 
     def forward_dummy(self, img):
@@ -177,7 +180,7 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
             dict[str, Tensor]: a dictionary of loss components
         """
         mask = bbox2mask(gt_bboxes, img_meta)
-        x = self.extract_feat(img)
+        x = self.extract_feat(img, mask)
 
         losses = dict()
 
@@ -272,7 +275,7 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
                                                 pos_labels)
                 losses.update(loss_mask)
 
-        # seg head and loss
+        #!TODO seg head and loss
         if self.with_seg_head:
             scales = [2**(i+2) for i in range(len(x))]
             mask_onehot = mask2onehot(mask)
@@ -425,27 +428,33 @@ def bbox2mask(gt_bboxes, img_meta):
         # img_shape = img_meta[i]['img_shape']
         mask = torch.zeros(size=pad_shape)[None, :, :]
         for bbox in bboxes:
-            x1, x2, y1, y2 = random_shift(bbox, 0.1).astype(np.int)
+            x1, x2, y1, y2 = random_shift(bbox, 0.3).astype(np.int)
             mask[:, y1:y2, x1:x2] = 1
         mask_list.append(mask)
 
-    mask = torch.stack(mask_list)
+    mask = torch.stack(mask_list).cuda()
     return mask
 
 def mask2onehot(mask):
     N, C, H, W = mask.shape
-    one_hot = torch.where(mask==0, torch.zeros(size=(N, C*2, H, W)), torch.ones(size=(N, C*2, H, W)))
-    return one_hot.view(N, -1, H, W).float().cuda()
+    one_hot = torch.where(mask==0, torch.zeros(size=(N, C*2, H, W)).cuda(), torch.ones(size=(N, C*2, H, W)).cuda())
+    return one_hot.view(N, -1, H, W).float()
 
-def random_shift(bbox, ratio=0.1):
+def random_shift(bbox, ratio=0.1, gaussian=False):
     ctr_x = (bbox[2] + bbox[0]) / 2
     ctr_y = (bbox[3] + bbox[1]) / 2
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    ctr_x_shift = ctr_x + np.random.randn() * w * ratio
-    ctr_y_shift = ctr_y + np.random.randn() * h * ratio
-    w = w * (1 + truncated_normal() * ratio)
-    h = h * (1 + truncated_normal() * ratio)
+    if gaussian:
+        ctr_x_shift = ctr_x + truncated_normal() * w * ratio
+        ctr_y_shift = ctr_y + truncated_normal() * h * ratio
+        w = w * (1 + truncated_normal() * ratio)
+        h = h * (1 + truncated_normal() * ratio)
+    else:
+        ctr_x_shift = ctr_x + (np.random.random() * 2 - 1) * w * ratio
+        ctr_y_shift = ctr_y + (np.random.random() * 2 - 1) * h * ratio
+        w = w * (1 + (np.random.random() * 2 - 1) * ratio)
+        h = h * (1 + (np.random.random() * 2 - 1) * ratio)
     return np.array([ctr_x_shift - w / 2.0, ctr_y_shift - h / 2.0,
                      ctr_x_shift + w / 2.0, ctr_y_shift + h / 2.0])
 
