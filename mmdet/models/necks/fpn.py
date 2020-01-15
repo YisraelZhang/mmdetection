@@ -127,7 +127,7 @@ class FPN(nn.Module):
             if seg_head is not None:
                 for i in range(used_backbone_levels - 1, 0, -1):
                     laterals[i - 1] += F.interpolate(
-                        laterals[i] * seg_head(laterals[i]), scale_factor=2, mode='nearest')
+                        laterals[i] * F.softmax(seg_head(laterals[i]), dim=1)[:, 1, :, :], scale_factor=2, mode='nearest')
             else:
                 for i in range(used_backbone_levels - 1, 0, -1):
                     laterals[i - 1] += F.interpolate(
