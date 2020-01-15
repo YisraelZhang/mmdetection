@@ -440,11 +440,18 @@ def mask2onehot(mask):
     one_hot = torch.where(mask==0, torch.zeros(size=(N, C*2, H, W)).cuda(), torch.ones(size=(N, C*2, H, W)).cuda())
     return one_hot.view(N, -1, H, W).float()
 
+def transform_scale(w, h):
+    if h < 32 and w < 32:
+        return  w * 1.2, h * 1.2
+    else:
+        return w, h
+
 def random_shift(bbox, ratio=0.1, gaussian=False):
     ctr_x = (bbox[2] + bbox[0]) / 2
     ctr_y = (bbox[3] + bbox[1]) / 2
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
+    w, h = transform_scale(w, h)
     if gaussian:
         ctr_x_shift = ctr_x + truncated_normal() * w * ratio
         ctr_y_shift = ctr_y + truncated_normal() * h * ratio
