@@ -105,7 +105,7 @@ class TwoStageDetector_seg(BaseDetector, RPNTestMixin, BBoxTestMixin,
                 x = self.neck(x, weight, scale)
             else:
                 if self.seg_head:
-                    x = self.neck(x, self.seg_head)
+                    x = self.neck(x, seg_head = self.seg_head)
                 else:
                     x = self.neck(x)
         return x
