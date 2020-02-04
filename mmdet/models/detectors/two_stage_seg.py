@@ -428,7 +428,8 @@ def bbox2mask(gt_bboxes, img_meta):
         # img_shape = img_meta[i]['img_shape']
         mask = torch.zeros(size=pad_shape)[None, :, :]
         for bbox in bboxes:
-            x1, x2, y1, y2 = random_shift(bbox, 0.3).astype(np.int)
+            bbox = random_shift(bbox, 0.3).astype(np.int)
+            x1, x2, y1, y2 = crop_bbox(bbox, img_meta)
             mask[:, y1:y2, x1:x2] = 1
         mask_list.append(mask)
 
@@ -467,3 +468,11 @@ def random_shift(bbox, ratio=0.1, gaussian=False):
 
 def truncated_normal(mean=0, std=1, minval=-1, maxval=1):
     return np.clip(np.random.normal(mean, std), minval, maxval)
+
+def crop_bbox(bbox, img_meta):
+    img_shape = img_meta['img_shape']
+    x1 = np.clip(bbox[0], a_min=0)
+    x2 = np.clip(bbox[2], a_max=img_shape[1])
+    y1 = np.clip(bbox[1], a_min=0)
+    y2 = np.clip(bbox[3], a_max=img_shape[0])
+    return np.array([x1, y1, x2, y2]).astype(np.int)
